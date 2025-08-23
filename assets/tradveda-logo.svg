@@ -1,0 +1,84 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Modern gradient background -->
+    <radialGradient id="bgGradient" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+      <stop offset="70%" style="stop-color:#059669;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0D9488;stop-opacity:1" />
+    </radialGradient>
+    
+    <!-- Subtle inner glow for Om symbol -->
+    <radialGradient id="omGradient" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.9" />
+      <stop offset="50%" style="stop-color:#F0FDF4;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#DCFCE7;stop-opacity:0.7" />
+    </radialGradient>
+    
+    <!-- Network node gradient -->
+    <radialGradient id="nodeGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ECFDF5;stop-opacity:0.9" />
+    </radialGradient>
+    
+    <!-- Text gradient -->
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F0FDF4;stop-opacity:0.95" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Modern circular background with gradient -->
+  <circle cx="100" cy="100" r="95" fill="url(#bgGradient)" stroke="#FFFFFF" stroke-width="2" opacity="0.95"/>
+  
+  <!-- Subtle inner circle for depth -->
+  <circle cx="100" cy="100" r="88" fill="none" stroke="#FFFFFF" stroke-width="0.5" opacity="0.3"/>
+  
+  <!-- Enhanced Om symbol with modern styling -->
+  <g transform="translate(100, 75)">
+    <!-- Main Om shape with gradient fill -->
+    <path d="M-30 5 Q-20 -18 -5 -12 Q8 -8 25 -2 Q30 8 20 18 Q5 25 -10 22 Q-25 18 -30 5 Z" 
+          fill="url(#omGradient)" stroke="#0D9488" stroke-width="1.5" opacity="0.9"/>
+    
+    <!-- Om traditional curves -->
+    <path d="M-15 0 Q-5 -8 5 -4 Q15 0 12 8 Q5 12 -8 10 Q-15 5 -15 0" 
+          fill="#059669" opacity="0.6"/>
+    
+    <!-- Om dot (bindu) -->
+    <circle cx="2" cy="-28" r="5" fill="url(#nodeGradient)" stroke="#0D9488" stroke-width="1"/>
+    
+    <!-- Om curve (nada) -->
+    <path d="M-10 -22 Q2 -35 12 -22" fill="none" stroke="url(#nodeGradient)" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Modern network nodes with enhanced styling -->
+  <circle cx="55" cy="55" r="4" fill="url(#nodeGradient)" stroke="#0D9488" stroke-width="1" opacity="0.8"/>
+  <circle cx="145" cy="55" r="4" fill="url(#nodeGradient)" stroke="#0D9488" stroke-width="1" opacity="0.8"/>
+  <circle cx="55" cy="145" r="4" fill="url(#nodeGradient)" stroke="#0D9488" stroke-width="1" opacity="0.8"/>
+  <circle cx="145" cy="145" r="4" fill="url(#nodeGradient)" stroke="#0D9488" stroke-width="1" opacity="0.8"/>
+  
+  <!-- Additional micro nodes for modern tech feel -->
+  <circle cx="75" cy="40" r="2" fill="#FFFFFF" opacity="0.6"/>
+  <circle cx="125" cy="40" r="2" fill="#FFFFFF" opacity="0.6"/>
+  <circle cx="40" cy="100" r="2" fill="#FFFFFF" opacity="0.6"/>
+  <circle cx="160" cy="100" r="2" fill="#FFFFFF" opacity="0.6"/>
+  
+  <!-- Enhanced connection lines with glow effect -->
+  <line x1="55" y1="55" x2="100" y2="75" stroke="#FFFFFF" stroke-width="2" opacity="0.4"/>
+  <line x1="145" y1="55" x2="100" y2="75" stroke="#FFFFFF" stroke-width="2" opacity="0.4"/>
+  <line x1="55" y1="145" x2="100" y2="115" stroke="#FFFFFF" stroke-width="2" opacity="0.4"/>
+  <line x1="145" y1="145" x2="100" y2="115" stroke="#FFFFFF" stroke-width="2" opacity="0.4"/>
+  
+  <!-- Thinner connecting lines for network effect -->
+  <line x1="55" y1="55" x2="145" y2="55" stroke="#ECFDF5" stroke-width="1" opacity="0.3"/>
+  <line x1="55" y1="145" x2="145" y2="145" stroke="#ECFDF5" stroke-width="1" opacity="0.3"/>
+  <line x1="55" y1="55" x2="55" y2="145" stroke="#ECFDF5" stroke-width="1" opacity="0.3"/>
+  <line x1="145" y1="55" x2="145" y2="145" stroke="#ECFDF5" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Modern brand text with better typography -->
+  <text x="100" y="155" text-anchor="middle" font-family="SF Pro Display, Arial, sans-serif" 
+        font-size="22" font-weight="700" fill="url(#textGradient)" letter-spacing="0.5">TradVeda</text>
+        
+  <!-- Refined tagline -->
+  <text x="100" y="172" text-anchor="middle" font-family="SF Pro Text, Arial, sans-serif" 
+        font-size="9" font-weight="500" fill="#ECFDF5" opacity="0.85" letter-spacing="1.2">ANCIENT WISDOM • MODERN COMMERCE</text>
+</svg> 
