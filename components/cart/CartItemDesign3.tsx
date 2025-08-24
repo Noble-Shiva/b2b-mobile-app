@@ -13,509 +13,349 @@ interface CartItemProps {
     name: string;
     price: number;
     originalPrice: number;
-    quantity: number;
     image: string;
-    supplier: string;
-    unit: string;
-    tierPricing: {
+    quantity: number;
+    supplier?: string;
+    unit?: string;
+    tierPricing?: Array<{
       tier: number;
       minQuantity: number;
       price: number;
       savings: number;
-    }[];
-    relatedProducts?: {
+    }>;
+    relatedProducts?: Array<{
       name: string;
       price: number;
-    }[];
+    }>;
+    schemeType?: string;
+    schemeApplied?: boolean;
+    schemeQuantity?: number;
+    schemeSavings?: number;
   };
   onRemove: (id: string) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
+  tabType?: 'mrp' | 'super-saver';
 }
 
-export default function CartItemDesign3({ item, onRemove, onUpdateQuantity }: CartItemProps) {
+export default function CartItemDesign3({ 
+  item, 
+  onRemove, 
+  onUpdateQuantity, 
+  tabType = 'super-saver'
+}: CartItemProps) {
   const isDark = useSelector(selectIsDark);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [calculatorQuantity, setCalculatorQuantity] = useState(item.quantity.toString());
-
   const currentSavings = (item.originalPrice - item.price) * item.quantity;
 
-  const calculateTotalPrice = (quantity: number, tiers: typeof item.tierPricing) => {
-    const applicableTier = tiers.find(tier => quantity >= tier.minQuantity) || tiers[0];
-    return applicableTier.price * quantity;
+  // Calculate scheme extra products based on quantity and scheme type
+  const calculateSchemeExtraProducts = () => {
+    if (!item.schemeType || !item.quantity) return 0;
+    
+    // Parse scheme like "4+1" to get baseQuantity and additionalQuantity
+    const schemeMatch = item.schemeType.match(/(\d+)\+(\d+)/);
+    if (!schemeMatch) return 0;
+    
+    const baseQuantity = parseInt(schemeMatch[1]);
+    const additionalQuantity = parseInt(schemeMatch[2]);
+    
+    // Calculate how many sets of the scheme are completed
+    const schemeSets = Math.floor(item.quantity / baseQuantity);
+    return schemeSets * additionalQuantity;
   };
 
-  const handleCalculatorUpdate = () => {
-    const newQuantity = parseInt(calculatorQuantity);
-    if (!isNaN(newQuantity) && newQuantity > 0) {
-      onUpdateQuantity(item.id, newQuantity);
-    }
-  };
+  const extraProducts = calculateSchemeExtraProducts();
 
   return (
     <View style={[
-      styles.container, 
+      styles.ultraCompactContainer,
       { 
-        backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
-        borderColor: isDark ? '#333333' : '#EEEEEE'
+        backgroundColor: isDark ? '#2A2A2A' : '#FFFFFF',
+        borderColor: isDark ? '#444444' : '#EEEEEE'
       }
     ]}>
-      {/* Single Line Product Section */}
-      <View style={styles.productSection}>
-        {/* Product Image */}
-        <Image source={{ uri: item.image }} style={styles.productImage} />
+      {/* Single Line Layout - Ultra Compact */}
+      <View style={styles.ultraCompactRow}>
+        {/* Product Image - Tiny */}
+        <View style={{flexDirection: 'column', alignItems: 'center', gap: 5}}>
+          <Image source={{ uri: item.image }} style={styles.ultraCompactImage} />
+          {/* Remove Button - Minimal */}
+          <TouchableOpacity 
+            style={styles.ultraCompactRemove}
+            onPress={() => onRemove(item.id)}
+          >
+            <Trash2 size={10} color="#FF4444" />
+            <Text variant="body" weight="regular" style={styles.deleteText}>
+              Delete
+            </Text>
+          </TouchableOpacity>
+        </View>
         
-        {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text weight="semibold" numberOfLines={2} style={{ fontSize: 16 }}>
+        {/* Product Info - Minimal */}
+        <View style={styles.ultraCompactInfo}>
+          <Text variant="body" weight="medium" numberOfLines={2} style={styles.ultraCompactName}>
             {item.name}
           </Text>
-          {/* <Text variant="caption" color="secondary">
-            by {item.supplier}
+          {/* <Text variant="caption" color="secondary" numberOfLines={1}>
+            MRP: 250 | Sale Price: 200 
+            Retail Margin: 15% | Scheme: 4+1
           </Text> */}
-          <View style={styles.priceContainer}>
-            {item.originalPrice > item.price ? (
-              <View style={styles.priceColumn}>
-                <View style={styles.mrpRow}>
-                  <Text variant="body-sm" color="secondary" style={styles.mrpLabel}>
-                    MRP
-                  </Text>
-                  <Text variant="body-sm" color="tertiary" style={styles.originalPrice}>
-                    {formatPrice(item.originalPrice)}
-                  </Text>
-                </View>
-                  <View style={styles.saleRow}>
-                   <Text variant="body" weight="bold" style={{ ...styles.salePrice, color: colors.primary[700] }}>
-                     {formatPrice(item.price)}
-                   </Text>
-                   <Text
-                     variant="body-sm"
-                     weight="bold"
-                     style={{
-                       ...styles.discountBadge,
-                       color: colors.primary[900],
-                       backgroundColor: colors.primary[100],
-                     }}
-                   >
-                     {Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)}% OFF
-                   </Text>
-                 </View>
-               </View>
-             ) : (
-               <View style={styles.saleRow}>
-                 <Text variant="body" weight="bold" style={{ ...styles.salePrice, color: colors.primary[700] }}>
-                   {formatPrice(item.price)}
-                 </Text>
-              </View>
+          <Text variant="body" weight="medium" color="secondary" 
+            style={[styles.ultraCompactPriceText, {
+              fontSize: tabType === 'super-saver' ? 13 : 16,
+              lineHeight: tabType === 'super-saver' ? 15 : 18,
+              paddingTop: tabType === 'super-saver' ? 0 : 5,
+            }]  }>
+            MRP: 
+            <Text variant="body" weight="bold" color="secondary" 
+              style={[styles.ultraCompactPriceText, {
+                fontSize: tabType === 'super-saver' ? 13 : 16,
+                lineHeight: tabType === 'super-saver' ? 15 : 18
+              }]}>
+              {' '}{formatPrice(item.originalPrice)}
+            </Text>
+            {(tabType === 'super-saver' && (currentSavings > 0 || (item.schemeQuantity && item.schemeQuantity > 0))) && (
+              <Text variant="body" weight="medium" color="secondary" style={styles.ultraCompactPriceText}>
+                {' • '}Sale Price: 
+                <Text variant="body" weight="bold" color="secondary" style={styles.ultraCompactPriceText}>
+                  {' '}{formatPrice(item.price)}
+                </Text>
+              </Text>
             )}
-            {/* Quantity Controls */}
-            <View style={styles.quantityContainer}>
-              <TouchableOpacity
-                style={styles.quantityButton}
+          </Text>
+          {(tabType === 'super-saver' && (currentSavings > 0 || extraProducts > 0)) && (
+            <Text variant="body" weight="medium" color="secondary" style={styles.ultraCompactPriceText}>
+              Margin: 
+              <Text variant="body" weight="bold" color="secondary" style={styles.ultraCompactPriceText}>
+                {' '}15% 
+              </Text>
+              {' '}• Scheme: 
+              <Text variant="body" weight="bold" color="secondary" style={styles.ultraCompactPriceText}>
+                {' '}{item.schemeType || '4+1'}
+              </Text>
+            </Text>
+          )}
+
+          {/* Quantity and Extra Products Info */}
+          {/* {tabType === 'super-saver' && extraProducts > 0 && (
+            <Text variant="caption" color="success" weight="medium" style={styles.ultraCompactSchemeInfo}>
+              Qty: {item.quantity} • Free: {extraProducts}
+            </Text>
+          )} */}
+          {/* <Text variant="caption" color="secondary" numberOfLines={1}>
+            Qty: {item.quantity} • Free: {item.schemeQuantity}
+          </Text> */}
+          {/* <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            <TouchableOpacity 
+              onPress={() => onRemove(item.id)}
+            >
+              <Text variant="caption" weight="bold" style={styles.deletetextt}>
+                Move to Wishlist
+              </Text>
+            </TouchableOpacity>
+          </View> */}
+        </View>
+
+        <View style={{flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12}}>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+            {/* Quantity */}
+            <View style={styles.ultraCompactQuantity}>
+              <TouchableOpacity 
+                style={[styles.ultraCompactQtyBtn, { backgroundColor: isDark ? '#444444' : '#F0F0F0' }]}
                 onPress={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
               >
-                <Minus size={14} color="#FFFFFF" />
+                <Minus size={18} color={isDark ? '#FFFFFF' : '#333333'} />
               </TouchableOpacity>
               
-              <Text variant="body-sm" weight="semibold" style={styles.quantityText}>
+              <Text variant="caption" weight="semibold" style={styles.ultraCompactQtyText}>
                 {item.quantity}
               </Text>
               
-              <TouchableOpacity
-                style={styles.quantityButton}
+              <TouchableOpacity 
+                style={[styles.ultraCompactQtyBtn, { backgroundColor: isDark ? '#444444' : '#F0F0F0' }]}
                 onPress={() => onUpdateQuantity(item.id, item.quantity + 1)}
               >
-                <Plus size={14} color="#FFFFFF" />
+                <Plus size={18} color={isDark ? '#FFFFFF' : '#333333'} />
               </TouchableOpacity>
             </View>
+            
+            {/* Remove Button - Minimal */}
+            {/* <TouchableOpacity 
+              style={styles.ultraCompactRemove}
+              onPress={() => onRemove(item.id)}
+            >
+              <Trash2 size={14} color="#FF4444" />
+            </TouchableOpacity> */}
           </View>
 
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            {/* <View style={styles.ultraCompactPrice}>
+              <Text variant="caption" weight="bold" style={styles.ultraCompactPriceText}>
+                {formatPrice(item.price)}
+              </Text>
+              {tabType === 'super-saver' && item.originalPrice > item.price && (
+                <Text variant="caption" color="secondary" style={styles.ultraCompactOriginalPrice}>
+                  {formatPrice(item.originalPrice)}
+                </Text>
+              )}
+            </View> */}
+            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2}}>
+              <Text variant="caption" weight="regular" style={[styles.ultraCompactTotal, {marginTop: 5}]}>{'Total :'}</Text>
+              <Text variant="body" weight="bold" style={[styles.ultraCompactTotal, {fontSize: 16}]}>
+                {formatPrice(item.price * item.quantity)}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
-
-      {/* Remove Button - Positioned at top right of card */}
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => onRemove(item.id)}
-      >
-        <CircleX size={24} color="#FF4444" />
-      </TouchableOpacity>
-
-      {/* Expandable Tier Section */}
-      <TouchableOpacity
-        style={[
-          styles.expandableHeader,
-          { 
-            backgroundColor: isDark ? '#2A2A2A' : '#F8F8F8',
-            borderColor: isDark ? '#444444' : '#DDDDDD'
-          }
-        ]}
-        onPress={() => setIsExpanded(!isExpanded)}
-      >
-        <Text variant="body" weight="medium" color="accent">
-          {isExpanded ? '▼' : '▶'} View Tier Pricing & Save More
-        </Text>
-        {isExpanded ? (
-          <ChevronUp size={16} color={isDark ? '#FFFFFF' : '#666666'} />
-        ) : (
-          <ChevronDown size={16} color={isDark ? '#FFFFFF' : '#666666'} />
-        )}
-      </TouchableOpacity>
-
-      {/* Expanded Tier Details */}
-      {isExpanded && (
-        <View style={[
-          styles.expandedContent,
-          { 
-            backgroundColor: isDark ? '#1A1A1A' : '#FAFAFA',
-            borderColor: isDark ? '#333333' : '#EEEEEE'
-          }
-        ]}>
-          {/* Tier Breakdown */}
-          <View style={styles.tierBreakdown}>
-            <Text variant="body" weight="semibold" style={styles.sectionTitle}>
-              Pricing Tiers
+      
+      {/* Micro Info Bar - Only if needed */}
+      {/* {(tabType === 'super-saver' && (currentSavings > 0 || extraProducts > 0)) && (
+        <View style={styles.ultraCompactInfoBar}>
+          {currentSavings > 0 && (
+            <Text variant="caption" color="success" style={styles.ultraCompactBadge}>
+              Save ₹{currentSavings.toFixed(0)}
             </Text>
-            
-            {item.tierPricing.map((tier, index) => {
-              const isCurrentTier = item.quantity >= tier.minQuantity;
-              const tierSavings = (item.originalPrice - tier.price) * tier.minQuantity;
-              
-              return (
-                <View
-                  key={tier.tier}
-                  style={[
-                    styles.tierRow,
-                    { 
-                      backgroundColor: isCurrentTier 
-                        ? (isDark ? '#0D3818' : '#E8F5E8')
-                        : (isDark ? '#2A2A2A' : '#FFFFFF'),
-                      borderColor: isCurrentTier ? '#4CAF50' : (isDark ? '#444444' : '#DDDDDD')
-                    }
-                  ]}
-                >
-                  <View style={styles.tierInfo}>
-                    <Text variant="body" weight="semibold">
-                      Tier {tier.tier}: {tier.minQuantity}+ units
-                      {isCurrentTier && ' (current)'}
-                    </Text>
-                    <Text variant="body-sm" weight="bold">
-                      {formatPrice(tier.price)}/{item.unit}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.tierSavings}>
-                    <View style={[
-                      styles.savingsChip,
-                      { backgroundColor: isCurrentTier ? '#4CAF50' : '#FF6B35' }
-                    ]}>
-                      <Text variant="body" weight="bold" style={styles.savingsChipText}>
-                        💰 ₹{tierSavings.toFixed(0)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Bulk Calculator */}
-          <View style={styles.calculatorSection}>
-            <View style={styles.calculatorHeader}>
-              <Calculator size={20} color="#4CAF50" />
-              <Text variant="body" weight="semibold" style={styles.sectionTitle}>
-                Bulk Calculator
-              </Text>
-            </View>
-            
-            <View style={styles.calculatorRow}>
-              <View style={styles.calculatorInput}>
-                <TextInput
-                  style={[
-                    styles.input,
-                    { 
-                      backgroundColor: isDark ? '#2A2A2A' : '#FFFFFF',
-                      borderColor: isDark ? '#555555' : '#DDDDDD',
-                      color: isDark ? '#FFFFFF' : '#000000'
-                    }
-                  ]}
-                  value={calculatorQuantity}
-                  onChangeText={setCalculatorQuantity}
-                  keyboardType="numeric"
-                  placeholder="Enter quantity"
-                  placeholderTextColor={isDark ? '#999999' : '#666666'}
-                />
-                <Text variant="body" color="secondary">units</Text>
-              </View>
-              
-              <Text variant="body-sm" weight="medium">=</Text>
-              
-              <View style={styles.calculatorResult}>
-                <Text variant="h4" weight="bold" color="accent">
-                  {formatPrice(calculateTotalPrice(parseInt(calculatorQuantity) || 0, item.tierPricing))}
-                </Text>
-              </View>
-              
-              <Button
-                variant="secondary"
-                size="medium"
-                style={styles.applyButton}
-                onPress={handleCalculatorUpdate}
-              >
-                <Text variant="body-sm" weight="bold" color="accent">Apply</Text>
-              </Button>
-            </View>
-          </View>
-
-          {/* Related Products */}
-          {item.relatedProducts && item.relatedProducts.length > 0 && (
-            <View style={styles.relatedSection}>
-              <Text variant="body" weight="semibold" style={styles.sectionTitle}>
-                Related Products
-              </Text>
-              
-              {item.relatedProducts.slice(0, 2).map((product, index) => (
-                <View key={index} style={styles.relatedItem}>
-                  <Text variant="body" numberOfLines={1} style={styles.relatedName}>
-                    {product.name}
-                  </Text>
-                  <Text variant="body" weight="medium">
-                    {formatPrice(product.price)}
-                  </Text>
-                  <TouchableOpacity style={styles.addRelatedButton}>
-                    <Plus size={12} color="#4CAF50" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
+          )}
+          {extraProducts > 0 && (
+            <Text variant="caption" color="success" style={styles.ultraCompactBadge}>
+              🎁 {extraProducts} free
+            </Text>
           )}
         </View>
+      )} */}
+
+      {/* Scheme Extra Products Bar - Only for Retail Billing */}
+      {tabType === 'super-saver' && extraProducts > 0 && (
+        <View style={styles.schemeExtraProductsBar}>
+          <View style={styles.schemeExtraProductsContent}>
+            <Text variant="caption" color="success" weight="medium" style={styles.schemeExtraProductsText}>
+              {extraProducts} free product(s) from {item.schemeType || '4+1'} scheme will be dispatched with your order.
+            </Text>
+          </View>
+        </View>
       )}
-
-      
-
-      {/* Item Total */}
-      <View style={[
-        styles.itemTotal,
-        { borderTopColor: isDark ? '#333333' : '#EEEEEE' }
-      ]}>
-        <Text variant="h4" color="secondary">
-          Item Total:
-        </Text>
-        <Text variant="h4" weight="bold">
-          {formatPrice(item.price * item.quantity)}
-        </Text>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-    borderRadius: 12,
+  ultraCompactContainer: {
     borderWidth: 1,
+    borderRadius: 12,
+    padding: 8, // Reduced padding for ultra-compact
+    marginBottom: 6, // Reduced margin
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-    position: 'relative',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  productSection: {
+  ultraCompactRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    alignItems: 'flex-start',
+    gap: 8, // Reduced gap for ultra-compact
   },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+  ultraCompactImage: {
+    width: 45, // Smaller image for ultra-compact
+    height: 45,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
   },
-  productInfo: {
+  ultraCompactInfo: {
     flex: 1,
+    gap: 4, // Reduced gap
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
   },
-  priceContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
+  ultraCompactName: {
+    // lineHeight: 16, // Reduced line height
+    // flex: 1,
+    fontSize: 16,
   },
-  priceColumn: {
+  ultraCompactPrice: {
+    flexDirection: 'row', // Stacked for ultra-compact
+    alignItems: 'flex-end',
     gap: 2,
   },
-  mrpRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  ultraCompactPriceText: {
+    // color: colors.primary[700],
+    // fontSize: 13,
+    // lineHeight: 15,
   },
-  mrpLabel: {
-    marginRight: 4,
-  },
-  originalPrice: {
+  ultraCompactOriginalPrice: {
     textDecorationLine: 'line-through',
-    marginLeft: 0,
-    marginRight: 8,
+    fontSize: 10, // Smaller font
   },
-  saleRow: {
+  ultraCompactQuantity: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 6, // Smaller radius
+    // padding: 1, // Reduced padding
   },
-  salePrice: {
-    marginRight: 8,
-  },
-  discountBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    fontSize: 12,
-    fontWeight: 'bold',
-    alignSelf: 'center',
-  },
-  quantityLayout: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-end'
-  },
-  quantityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#37C871',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    height: 30,
-  },
-  expandableHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderTopWidth: 1,
-  },
-  expandedContent: {
-    padding: 16,
-    borderTopWidth: 1,
-  },
-  tierBreakdown: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    // marginBottom: 8,
-    color: '#4CAF50',
-  },
-  tierRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 8,
+  ultraCompactQtyBtn: {
+    width: 24, // Smaller buttons
+    height: 24,
     borderRadius: 6,
-    borderWidth: 1,
-    marginBottom: 4,
-    marginTop: 4,
-  },
-  tierInfo: {
-    flex: 1,
-  },
-  tierSavings: {
-    alignItems: 'flex-end',
-  },
-  savingsChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 7,
-  },
-  savingsChipText: {
-    color: '#FFFFFF',
-    // fontSize: 10,
-  },
-  calculatorSection: {
-    marginBottom: 16,
-  },
-  calculatorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 4,
-  },
-  calculatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  calculatorInput: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 6,
-    borderColor: colors.primary[500],
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    fontSize: 15,
-  },
-  calculatorResult: {
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  applyButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.primary[500],
-    backgroundColor: colors.primary[50],
-  },
-  relatedSection: {
-    marginBottom: 8,
-  },
-  relatedItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-    gap: 8,
-  },
-  relatedName: {
-    flex: 1,
-  },
-  addRelatedButton: {
-    padding: 4,
-  },
-  quantityButton: {
-    width: 28,
-    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  quantityText: {
-    color: '#FFFFFF',
-    // marginHorizontal: 8,
-    minWidth: 20,
+  ultraCompactQtyText: {
+    minWidth: 24, // Reduced width
     textAlign: 'center',
+    fontSize: 16, // Smaller font
+    paddingTop: 5,
   },
-  removeButton: {
-    position: 'absolute',
-    top: -15,
-    right: -10,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 30,
-    padding: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
-    zIndex: 999,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+  ultraCompactTotal: {
+    marginTop: 3,
+    color: colors.primary[700],
+    fontSize: 13, // Smaller font
   },
-  itemTotal: {
+  deleteText: {
+    color: colors.error[700],
+    fontSize: 12, // Smaller font
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+  },
+  ultraCompactRemove: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  ultraCompactInfoBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    // marginTop: 6, // Reduced margin
+    // paddingTop: 6, // Reduced padding
     borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  ultraCompactBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    paddingHorizontal: 6, // Reduced padding
+    paddingVertical: 1, // Reduced padding
+    borderRadius: 3, // Smaller radius
+    fontSize: 10, // Smaller font
+  },
+  schemeExtraProductsBar: {
+    backgroundColor: 'rgba(76, 175, 80, 0.05)', // Lighter green background
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  schemeExtraProductsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  schemeExtraProductsText: {
+    color: colors.success[700],
+    fontSize: 12,
+  },
+  ultraCompactSchemeInfo: {
+    marginTop: 2,
+    fontSize: 12,
   },
 }); 
