@@ -144,7 +144,7 @@ export default function TabLayout() {
         name="search"
         options={{
           title: 'Search',
-          // href: null, // This hides the tab
+          href: null, // This hides the tab
         }}
       />
       <Tabs.Screen
@@ -194,6 +194,12 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
+        }}
+      /> */}
+      {/* <Tabs.Screen
+        name="b2b-cart"
+        options={{
+          title: 'B2B Cart',
         }}
       /> */}
     </Tabs>

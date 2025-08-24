@@ -3,14 +3,14 @@ import { View, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, TextStyle
 import RenderHtml from 'react-native-render-html';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Star, Minus, Plus, ShoppingCart, Heart, MessageSquare, ChevronDown, Play } from 'lucide-react-native';
+import { Star, Minus, Plus, ShoppingCart, Heart, MessageSquare, ChevronDown, Play, ChevronRight } from 'lucide-react-native';
 import { fetchProductById } from '@/api/products';
 import { formatPrice, calculateDiscountedPrice } from '@/utils/helpers';
 import { Text, BackButton, Policies } from '@/components/ui';
 import { colors } from '@/utils/theme';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectWishlistItems, addToWishlist, removeFromWishlist } from '@/store/wishlistSlice';
-import { addToCart, updateQuantity, removeFromCart, selectCartItems, selectTieredTotal, selectTotalSavings } from '@/store/cartSlice';
+import { addToCart, updateQuantity, removeFromCart, selectCartItems, selectTieredTotal, selectTotalSavings, applySchemes, selectSchemeInfo } from '@/store/cartSlice';
 import { selectIsDark } from '@/store/themeSlice';
 import CartPreviewModal from '@/components/cart/CartPreviewModal';
 
@@ -57,7 +57,26 @@ export default function ProductDetailScreen() {
   const isDark = useSelector(selectIsDark);
   const cartTotal = useSelector(selectTieredTotal);
   const cartSavings = useSelector(selectTotalSavings);
+  const schemeInfo = useSelector(selectSchemeInfo);
   const [showCartPreview, setShowCartPreview] = useState(false);
+  
+  // Scheme configuration
+  const SCHEME_TYPE = "4+1";
+  const SCHEME_THRESHOLD = 1000; // ₹1000 threshold
+  
+  // Parse scheme type to get base quantity and additional quantity
+  const parseSchemeType = (schemeType: string) => {
+    const match = schemeType.match(/(\d+)\+(\d+)/);
+    if (match) {
+      return {
+        baseQuantity: parseInt(match[1]), // 4 in "4+1"
+        additionalQuantity: parseInt(match[2]) // 1 in "4+1"
+      };
+    }
+    return { baseQuantity: 4, additionalQuantity: 1 }; // Default fallback
+  };
+  
+  const { baseQuantity, additionalQuantity } = parseSchemeType(SCHEME_TYPE);
   
   const [product, setProduct] = useState<any>(null);
   const [quantity, setQuantity] = useState(5); // Always start with MOQ
@@ -206,12 +225,23 @@ export default function ProductDetailScreen() {
             
             console.log('Normalized variations:', normalizedVariations);
             setVariants(normalizedVariations);
-            setSelectedVariant(normalizedVariations[0]);
-            console.log('Selected variant:', normalizedVariations[0]);
             
-            const firstVariant = normalizedVariations[0];
-            setProductPrice(firstVariant.regular_price || firstVariant.price);
-            setDiscountedPrice(firstVariant.sale_price || firstVariant.price);
+            // Select first available variant (not out of stock)
+            const firstAvailableVariant = normalizedVariations.find((variant: any) => (variant.stock_quantity || 0) > 0);
+            if (firstAvailableVariant) {
+              setSelectedVariant(firstAvailableVariant);
+              console.log('Selected available variant:', firstAvailableVariant);
+              
+              setProductPrice(firstAvailableVariant.regular_price || firstAvailableVariant.price);
+              setDiscountedPrice(firstAvailableVariant.sale_price || firstAvailableVariant.price);
+            } else {
+              // If no variants are in stock, select the first one but show warning
+              setSelectedVariant(normalizedVariations[0]);
+              console.log('Selected variant (out of stock):', normalizedVariations[0]);
+              
+              setProductPrice(normalizedVariations[0].regular_price || normalizedVariations[0].price);
+              setDiscountedPrice(normalizedVariations[0].sale_price || normalizedVariations[0].price);
+            }
           } else {
             console.log('No variations found for product');
             setVariants([]);
@@ -276,6 +306,11 @@ export default function ProductDetailScreen() {
     } else {
       // Valid quantity - update cart
       dispatch(updateQuantity({ id: itemId, quantity: newQuantity }));
+      
+      // Apply schemes after quantity update
+      setTimeout(() => {
+        dispatch(applySchemes({ schemeType: SCHEME_TYPE, schemeThreshold: SCHEME_THRESHOLD }));
+      }, 100);
     }
   };
 
@@ -285,9 +320,19 @@ export default function ProductDetailScreen() {
   const gstAmount = showGst ? subtotal * 0.18 : 0;
   const totalPrice = subtotal + gstAmount;
   
-  // B2B Add to Cart Handler - Adds with MOQ
+  // B2B Add to Cart Handler - Adds with MOQ and applies schemes
   const handleAddToCart = () => {
     if (!product) return;
+    
+    // Check if selected variant is out of stock
+    if (selectedVariant && (selectedVariant.stock_quantity || 0) <= 0) {
+      Alert.alert(
+        "Out of Stock", 
+        "This variant is currently out of stock. Please select an available variant.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
     
     const itemId = selectedVariant ? String(selectedVariant.id) : String(product.id);
     const cartItem = cartItems.find(item => item.id === itemId);
@@ -313,7 +358,12 @@ export default function ProductDetailScreen() {
         image: productImage || product.images || product.image || '',
         quantity: 5, // Always add with MOQ
         discount: safeOriginalPrice > safeDiscountedPrice ? 
-          Math.round((safeOriginalPrice - safeDiscountedPrice) / safeOriginalPrice * 100) : 0
+          Math.round((safeOriginalPrice - safeDiscountedPrice) / safeOriginalPrice * 100) : 0,
+        schemeType: SCHEME_TYPE,
+        schemeThreshold: SCHEME_THRESHOLD,
+        schemeApplied: false,
+        schemeQuantity: 0,
+        schemeSavings: 0
       }));
     } else {
       dispatch(addToCart({
@@ -324,9 +374,19 @@ export default function ProductDetailScreen() {
         image: productImage || product.images || product.image || '',
         quantity: 5, // Always add with MOQ
         discount: safeOriginalPrice > safeDiscountedPrice ? 
-          Math.round((safeOriginalPrice - safeDiscountedPrice) / safeOriginalPrice * 100) : 0
+          Math.round((safeOriginalPrice - safeDiscountedPrice) / safeOriginalPrice * 100) : 0,
+        schemeType: SCHEME_TYPE,
+        schemeThreshold: SCHEME_THRESHOLD,
+        schemeApplied: false,
+        schemeQuantity: 0,
+        schemeSavings: 0
       }));
     }
+    
+    // Apply schemes after adding to cart
+    setTimeout(() => {
+      dispatch(applySchemes({ schemeType: SCHEME_TYPE, schemeThreshold: SCHEME_THRESHOLD }));
+    }, 100);
   };
   
   const toggleFavorite = () => {
@@ -398,62 +458,62 @@ export default function ProductDetailScreen() {
     const percentageSavings = mainProductPrice > 0 ? 
       Math.round(((mainProductPrice - item.price) / mainProductPrice) * 100) : 0;
     
-          return (
-        <View style={[styles.detailedCard, { backgroundColor: isDark ? '#333' : '#FFF', borderColor: isBest ? '#43a047' : '#E0E0E0' }]}>
-          {isBest && (
-            <View style={{
-              position: 'absolute',
-              top: -8,
-              left: 16,
-              right: 16,
-              backgroundColor: '#43a047',
-              paddingVertical: 4,
-              borderRadius: 8,
-              alignItems: 'center',
-            }}>
-              <Text style={{
-                color: '#fff',
-                fontSize: 11,
-                fontWeight: 'bold',
-              }}>RECOMMENDED</Text>
-            </View>
-          )}
-          
-          {percentageSavings > 0 && !isBest && (
-            <View style={styles.savingsPercentageBadge}>
-              <Text style={styles.savingsPercentageText}>{percentageSavings}% cheaper</Text>
-            </View>
-          )}
-          {percentageSavings < 0 && !isBest && (
-            <View style={styles.expensivePercentageBadge}>
-              <Text style={styles.expensivePercentageText}>{Math.abs(percentageSavings)}% more</Text>
-            </View>
-          )}
-          
+    return (
+      <View style={[styles.detailedCard, { backgroundColor: isDark ? '#333' : '#FFF', borderColor: isBest ? '#43a047' : '#E0E0E0' }]}>
+        {isBest && (
           <View style={{
-            flexDirection: 'row',
+            position: 'absolute',
+            top: -8,
+            left: 16,
+            right: 16,
+            backgroundColor: '#43a047',
+            paddingVertical: 4,
+            borderRadius: 8,
             alignItems: 'center',
-            marginBottom: 16,
-            marginTop: isBest ? 8 : 0,
           }}>
-            <Image 
-              source={{ uri: item.image }} 
-              style={{
-                width: 60,
-                height: 60,
-                marginRight: 12,
-              }}
-              resizeMode="contain"
-              onError={() => console.log('Image failed to load:', item.image)}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailedBrand}>{item.brand}</Text>
-              <Text style={styles.detailedPrice}>{formatPrice(item.price)}</Text>
-              {priceDiff > 0 && <Text style={{ fontSize: 12, color: '#e53935' }}>+{formatPrice(priceDiff)}</Text>}
-              {isBest && <Text style={{ fontSize: 12, color: '#43a047', fontWeight: 'bold' }}>Best Price</Text>}
-            </View>
+            <Text style={{
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 'bold',
+            }}>RECOMMENDED</Text>
           </View>
+        )}
         
+        {percentageSavings > 0 && !isBest && (
+          <View style={styles.savingsPercentageBadge}>
+            <Text style={styles.savingsPercentageText}>{percentageSavings}% cheaper</Text>
+          </View>
+        )}
+        {percentageSavings < 0 && !isBest && (
+          <View style={styles.expensivePercentageBadge}>
+            <Text style={styles.expensivePercentageText}>{Math.abs(percentageSavings)}% more</Text>
+          </View>
+        )}
+        
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 16,
+          marginTop: isBest ? 8 : 0,
+        }}>
+          <Image 
+            source={{ uri: item.image }} 
+            style={{
+              width: 60,
+              height: 60,
+              marginRight: 12,
+            }}
+            resizeMode="contain"
+            onError={() => console.log('Image failed to load:', item.image)}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.detailedBrand}>{item.brand}</Text>
+            <Text style={styles.detailedPrice}>{formatPrice(item.price)}</Text>
+            {priceDiff > 0 && <Text style={{ fontSize: 12, color: '#e53935' }}>+{formatPrice(priceDiff)}</Text>}
+            {isBest && <Text style={{ fontSize: 12, color: '#43a047', fontWeight: 'bold' }}>Best Price</Text>}
+          </View>
+        </View>
+      
         {mainProductPrice > 0 && percentageSavings !== 0 && (
           <View style={styles.comparisonSection}>
             <Text style={styles.comparisonLabel}>vs Original:</Text>
@@ -519,6 +579,13 @@ export default function ProductDetailScreen() {
       setQuantity(5); // Always show MOQ when not in cart
     }
   }, [cartItems, selectedVariant, product]);
+
+  // Auto-apply schemes when cart changes
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      dispatch(applySchemes({ schemeType: SCHEME_TYPE, schemeThreshold: SCHEME_THRESHOLD }));
+    }
+  }, [cartItems, dispatch]);
 
   if (loading) {
     return (
@@ -735,7 +802,14 @@ export default function ProductDetailScreen() {
               {variants && variants.length > 0 ? (
                 <>
                   <FlatList
-                    data={variants}
+                    data={variants.sort((a, b) => {
+                      // Sort: available variants first, then out of stock
+                      const aStock = a.stock_quantity || 0;
+                      const bStock = b.stock_quantity || 0;
+                      if (aStock > 0 && bStock === 0) return -1;
+                      if (aStock === 0 && bStock > 0) return 1;
+                      return 0;
+                    })}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     keyExtractor={(variant, index) => `variant-${variant.id || index}`}
@@ -749,6 +823,7 @@ export default function ProductDetailScreen() {
                       const discountPercent = regularPrice > 0 ? Math.round((regularPrice - salePrice) / regularPrice * 100) : 0;
                       const isSelected = selectedVariant?.id === variant.id;
                       const stockQuantity = variant.stock_quantity || 0;
+                      const isOutOfStock = stockQuantity <= 0;
                       
                       return (
                         <TouchableOpacity
@@ -758,12 +833,17 @@ export default function ProductDetailScreen() {
                             marginRight: 8,
                             padding: 8,
                             borderWidth: isSelected ? 1 : 0.5,
-                            borderColor: isSelected ? colors.primary[500] : '#ddd',
+                            borderColor: isSelected ? colors.primary[500] : isOutOfStock ? '#ccc' : '#ddd',
                             borderRadius: 8,
-                            backgroundColor: isSelected ? (isDark ? '#2a3b4d' : '#f0f7ff') : (isDark ? '#333' : '#fff'),
+                            backgroundColor: isSelected ? (isDark ? '#2a3b4d' : '#f0f7ff') : 
+                                       isOutOfStock ? (isDark ? '#2a2a2a' : '#f5f5f5') : 
+                                       (isDark ? '#333' : '#fff'),
                             position: 'relative',
+                            opacity: isOutOfStock ? 0.6 : 1,
                           }}
                           onPress={() => {
+                            if (isOutOfStock) return; // Prevent selection of out-of-stock variants
+                            
                             setSelectedVariant(variant);
                             setProductPrice(
                               variant.regular_price != null && !isNaN(Number(variant.regular_price))
@@ -776,12 +856,20 @@ export default function ProductDetailScreen() {
                                 : Number(variant.price)
                             );
                           }}
+                          disabled={isOutOfStock}
                         >
-                          <Text variant='body' weight='bold' style={{ color: isSelected ? colors.primary[700] : isDark ? '#fff' : '#333', marginBottom: 4}}>
+                          <Text variant='body' weight='bold' style={{ 
+                            color: isSelected ? colors.primary[700] : 
+                                   isOutOfStock ? '#999' : 
+                                   isDark ? '#fff' : '#333', 
+                            marginBottom: 4
+                          }}>
                             {displayValue || `Option ${index + 1}`}
                           </Text>
                           <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
-                            <Text variant='body' weight='bold' style={{color: colors.primary[700]}}>
+                            <Text variant='body' weight='bold' style={{
+                              color: isOutOfStock ? '#999' : colors.primary[700]
+                            }}>
                               {formatPrice(salePrice)}
                             </Text>
                             {regularPrice > salePrice && (
@@ -791,14 +879,60 @@ export default function ProductDetailScreen() {
                             )}
                           </View>
                           <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 1}}>
-                            <View style={{paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, backgroundColor: stockQuantity > 0 ? '#E8F5E9' : '#FFEBEE'}}>
-                              <Text variant='body-sm' style={{color: stockQuantity > 0 ? '#2E7D32' : '#C62828'}}>
+                            <View style={{
+                              paddingHorizontal: 4, 
+                              paddingVertical: 1, 
+                              borderRadius: 3, 
+                              backgroundColor: stockQuantity > 0 ? '#E8F5E9' : '#FFEBEE'
+                            }}>
+                              <Text variant='body-sm' style={{
+                                color: stockQuantity > 0 ? '#2E7D32' : '#C62828',
+                                fontSize: 10
+                              }}>
                                 {stockQuantity > 0 ? 'In Stock' : 'Out of Stock'}
                               </Text>
                             </View>
                           </View>
-                          {isSelected && (
-                            <View style={{position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.primary[500], alignItems: 'center', justifyContent: 'center'}}>
+                          
+                          {/* Out of Stock Overlay */}
+                          {/* {isOutOfStock && (
+                            <View style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                              borderRadius: 8,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                            }}>
+                              <Text style={{
+                                color: '#C62828',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                paddingHorizontal: 6,
+                                paddingVertical: 2,
+                                borderRadius: 4,
+                              }}>
+                                UNAVAILABLE
+                              </Text>
+                            </View>
+                          )} */}
+                          
+                          {isSelected && !isOutOfStock && (
+                            <View style={{
+                              position: 'absolute', 
+                              top: -6, 
+                              right: -6, 
+                              width: 16, 
+                              height: 16, 
+                              borderRadius: 8, 
+                              backgroundColor: colors.primary[500], 
+                              alignItems: 'center', 
+                              justifyContent: 'center'
+                            }}>
                               <Text style={{color: 'white', fontSize: 10, fontWeight: 'bold'}}>✓</Text>
                             </View>
                           )}
@@ -814,11 +948,40 @@ export default function ProductDetailScreen() {
                   </Text>
                 </View>
               )}
+              
+              {/* Warning when all variants are out of stock */}
+              {variants && variants.length > 0 && variants.every((variant: any) => (variant.stock_quantity || 0) <= 0) && (
+                <View style={{
+                  marginTop: 12,
+                  padding: 12,
+                  backgroundColor: isDark ? '#3d1f1f' : '#ffebee',
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#f44336',
+                }}>
+                  <Text style={{
+                    fontSize: 14,
+                    textAlign: 'center',
+                    color: '#d32f2f',
+                    fontWeight: '600',
+                  }}>
+                    ⚠️ All variants are currently out of stock
+                  </Text>
+                  <Text style={{
+                    fontSize: 12,
+                    textAlign: 'center',
+                    color: '#d32f2f',
+                    marginTop: 4,
+                  }}>
+                    Please check back later or contact support
+                  </Text>
+                </View>
+              )}
             </View>
           )}
-          
+
           {/* Price Section */}
-          <View style={[styles.priceContainer, { backgroundColor: isDark ? '#222' : '#f5f5f5' }]}> 
+          {/* <View style={[styles.priceContainer, { backgroundColor: isDark ? '#222' : '#f5f5f5' }]}> 
             {productPrice !== null && discountedPrice !== null ? (
               productPrice > discountedPrice ? (
                 <View style={{gap: 5, marginRight: 10}}>
@@ -904,6 +1067,115 @@ export default function ProductDetailScreen() {
               <Text variant="h4" weight="bold" color="inverse">Add</Text>
             </TouchableOpacity>
             }
+          </View> */}
+          
+          {/* Pricing and Cart Section */}
+          <View style={[styles.pricingCartContainer, { backgroundColor: isDark ? '#222' : '#f5f5f5' }]}>
+            {/* Pricing Information */}
+            <View style={styles.pricingSection}>
+              {productPrice !== null && discountedPrice !== null ? (
+                // productPrice > discountedPrice ? (
+                  <>
+                    <View style={styles.priceRow}>
+                      <Text variant="h4" weight="bold" style={styles.mrpText}>
+                        MRP : {formatPrice(productPrice)}
+                      </Text>
+                    </View>
+                    <View style={styles.priceRow}>
+                      <Text variant="h4" weight="bold" style={styles.salePriceText}>
+                        Sale Price: {formatPrice(discountedPrice)} (Retail Margin: 15%)
+                      </Text>
+                    </View>
+                  </>
+                // ) : (
+                //   <View style={styles.priceRow}>
+                //     <Text variant="h4" weight="bold" style={styles.mrpText}>
+                //       MRP : {formatPrice(discountedPrice)}
+                //     </Text>
+                //   </View>
+                // )
+              ) : null}
+              
+              {/* Available Scheme */}
+              <View style={styles.schemeRow}>
+                <Text variant="h4" weight="bold" style={styles.salePriceText}>
+                  Available Scheme: {SCHEME_TYPE}
+                </Text>
+                <Text variant="body-sm" color="secondary" style={styles.schemeThresholdText}>
+                  Activate when cart total ≥ ₹{SCHEME_THRESHOLD}
+                </Text>
+                {/* Only show scheme active text when items are in cart and scheme is applied */}
+                {showQuantityControls && schemeInfo && schemeInfo.schemeQuantity && schemeInfo.schemeQuantity > 0 && (
+                  <Text variant="body-sm" color="success" style={styles.schemeActiveText}>
+                    🎉 Scheme Active! You get {schemeInfo.schemeQuantity} free items
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Cart Controls */}
+            <View style={styles.cartControlsSection}>
+              {!showQuantityControls ? (
+                <TouchableOpacity
+                  style={[
+                    styles.addToCartButton,
+                    selectedVariant && (selectedVariant.stock_quantity || 0) <= 0 && styles.addToCartButtonDisabled
+                  ]}
+                  onPress={handleAddToCart}
+                  disabled={!!(selectedVariant && (selectedVariant.stock_quantity || 0) <= 0)}
+                >
+                  <Text variant="h4" weight="bold" color="inverse">
+                    {selectedVariant && (selectedVariant.stock_quantity || 0) <= 0 ? 'Out of Stock' : 'Add to cart'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              
+              {showQuantityControls && (
+                <View style={styles.quantityAndCartRow}>
+                  <View style={styles.quantityControls}>
+                    <TouchableOpacity 
+                      style={styles.quantityButton} 
+                      onPress={() => handleQuantityChange(-1)}
+                    >
+                      <Minus size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    
+                    <View style={styles.quantityDisplay}>
+                      <Text variant="h4" weight="semibold" style={styles.quantityValue}>
+                        {quantity}
+                      </Text>
+                    </View>
+                    
+                    <TouchableOpacity 
+                      style={styles.quantityButton} 
+                      onPress={() => handleQuantityChange(1)}
+                    >
+                      <Plus size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={styles.viewCartButton}
+                    onPress={() => setShowCartPreview(true)}
+                  >
+                    <Text variant="body" weight="semibold" color="inverse">View Cart</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Scheme Unlocked Banner */}
+            {showQuantityControls && schemeInfo && schemeInfo.schemeQuantity && schemeInfo.schemeQuantity > 0 && (
+              <View style={styles.schemeBanner}>
+                <Text style={styles.schemeBannerTitle}>{SCHEME_TYPE} SCHEME UNLOCKED!</Text>
+                <Text style={styles.schemeBannerSubtitle}>
+                  {schemeInfo.schemeQuantity} FREE PRODUCT{schemeInfo.schemeQuantity > 1 ? 'S' : ''} ADDED TO YOUR CART.
+                </Text>
+                <Text style={styles.schemeSavingsText}>
+                  Total Savings: ₹{schemeInfo.schemeSavings?.toFixed(0) || 0}
+                </Text>
+              </View>
+            )}
           </View>
           
           {/* B2B Pricing Section */}
@@ -1592,22 +1864,37 @@ export default function ProductDetailScreen() {
               </Text>
             )}
           </View>
+
         </View>
-        <TouchableOpacity
-          style={[styles.addToCartButton, { marginRight: 10, backgroundColor: colors.primary[100] } ]}
-          onPress={() => setShowCartPreview(true)}
-        >
-          <Text variant="body" weight="semibold">Preview</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.addToCartButton, { backgroundColor: colors.primary[600] }]} 
-          onPress={handleCheckout}
-        >
-          <ShoppingCart size={18} color="#FFFFFF" />
-          <Text variant="body" weight="semibold" color="inverse" style={styles.addToCartButtonText}>
-            Checkout
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.addToCartButton, { 
+              marginRight: 12, 
+              backgroundColor: colors.primary[100],
+              paddingHorizontal: 16,
+              minWidth: 80
+            }]}
+            onPress={() => setShowCartPreview(true)}
+          >
+            <Text variant="body" weight="semibold" style={{ color: colors.primary[700] }}>Preview</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.addToCartButton, { 
+              backgroundColor: colors.primary[600],
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingHorizontal: 16,
+              minWidth: 100
+            }]} 
+            onPress={handleCheckout}
+          >
+            <ShoppingCart size={18} color="#FFFFFF" />
+            <Text variant="body" weight="semibold" color="inverse" style={styles.addToCartButtonText}>
+              Checkout
+            </Text>
+          </TouchableOpacity>
+        </View>
         
       </View>
       <CartPreviewModal visible={showCartPreview} onClose={() => setShowCartPreview(false)} />
@@ -1765,13 +2052,7 @@ export default function ProductDetailScreen() {
 );
 }
 
-function ChevronRight({ size, color }: { size: number, color: string }) {
-  return (
-    <View style={{ width: size, height: size, marginLeft: 4 }}>
-      <View style={{ transform: [{ rotate: '-45deg' }], width: size/2, height: size/2, borderBottomWidth: 2, borderRightWidth: 2, borderColor: color, position: 'absolute', bottom: size/4, right: size/4 }} />
-    </View>
-  );
-}
+
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -2054,19 +2335,22 @@ const styles = StyleSheet.create({
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 15,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 4,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary[600],
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityValue: {
-    marginHorizontal: 10,
-    minWidth: 24,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
   },
   footer: {
     position: 'absolute',
@@ -2084,16 +2368,26 @@ const styles = StyleSheet.create({
   totalContainer: {
     flex: 1,
   },
-  addToCartButton: {
+  buttonContainer: {
     flexDirection: 'row',
-    borderRadius: 12,
+    alignItems: 'center',
+  },
+  addToCartButton: {
+    backgroundColor: colors.primary[600],
+    borderRadius: 8,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
+    minWidth: 120,
+  },
+  addToCartButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
   addToCartButtonText: {
-    marginLeft: 8,
+    marginLeft: 6,
   },
   lightboxContainer: {
     flex: 1,
@@ -2908,5 +3202,143 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#555',
     flex: 1,
+  },
+  // New pricing and cart styles
+  pricingCartContainer: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+  },
+  pricingSection: {
+    marginBottom: 16,
+  },
+  priceRow: {
+    marginBottom: 8,
+  },
+  mrpText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  salePriceText: {
+    fontSize: 16,
+    color: colors.primary[700],
+  },
+  schemeRow: {
+    // marginTop: 12,
+    marginBottom: 16,
+  },
+  schemeText: {
+    fontSize: 16,
+    color: '#43a047',
+    fontWeight: 'bold',
+  },
+  schemeThresholdText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  schemeActiveText: {
+    fontSize: 14,
+    color: '#43a047',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  cartControlsSection: {
+    marginBottom: 16,
+  },
+
+  quantityAndCartRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quantityDisplay: {
+    width: 40,
+    height: 32,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 8,
+    borderRadius: 4,
+  },
+  viewCartButton: {
+    backgroundColor: colors.primary[600],
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  schemeBanner: {
+    backgroundColor: '#ff9800',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  schemeBannerTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  schemeBannerSubtitle: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
+  schemeSavingsText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
+    marginTop: 4,
+    opacity: 0.9,
+  },
+
+  
+  // Sale MRP Section Styles
+  saleMrpContainer: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+  },
+  priceDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  priceLabel: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+  },
+  mrpValue: {
+    fontSize: 18,
+    color: '#333',
+    fontWeight: 'bold',
+    // textDecorationLine: 'line-through',
+  },
+  saleMrpValue: {
+    fontSize: 18,
+    color: colors.primary[700],
+    fontWeight: 'bold',
+  },
+  marginValue: {
+    fontSize: 18,
+    color: '#43a047',
+    fontWeight: 'bold',
+  },
+  savingsRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    alignItems: 'center',
+  },
+  noPriceInfo: {
+    padding: 16,
+    alignItems: 'center',
   },
 });

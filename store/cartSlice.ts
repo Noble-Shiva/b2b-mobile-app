@@ -15,6 +15,12 @@ export interface CartItem {
   category?: string;
   parentProductId?: string; // For variant tracking
   variantName?: string;    // For variant display
+  // Scheme related fields
+  schemeType?: string;     // e.g., "4+1", "5+1"
+  schemeThreshold?: number; // Minimum cart total to activate scheme
+  schemeApplied?: boolean;  // Whether scheme is currently active
+  schemeQuantity?: number;  // How many free items from scheme
+  schemeSavings?: number;   // Total savings from scheme
 }
 
 interface CartState {
@@ -33,6 +39,32 @@ const calculateTieredPrice = (basePrice: number, quantity: number) => {
     return basePrice * 0.95; // 5% discount
   }
   return basePrice;
+};
+
+// Calculate scheme benefits
+const calculateSchemeBenefits = (cartTotal: number, schemeThreshold: number, schemeType: string) => {
+  if (cartTotal < schemeThreshold) {
+    return { applied: false, quantity: 0, savings: 0 };
+  }
+  
+  // Parse scheme type (e.g., "4+1" means for every 4 items, get 1 free)
+  const schemeMatch = schemeType.match(/(\d+)\+(\d+)/);
+  if (!schemeMatch) {
+    return { applied: false, quantity: 0, savings: 0 };
+  }
+  
+  const buyQuantity = parseInt(schemeMatch[1]);
+  const freeQuantity = parseInt(schemeMatch[2]);
+  
+  // Calculate how many scheme sets can be applied
+  const totalItems = Math.floor(cartTotal / (schemeThreshold / 4)); // Assuming 4 items = threshold
+  const schemeSets = Math.floor(totalItems / buyQuantity);
+  
+  return {
+    applied: schemeSets > 0,
+    quantity: schemeSets * freeQuantity,
+    savings: schemeSets * freeQuantity * 100, // Assuming average item price of 100
+  };
 };
 
 const cartSlice = createSlice({
@@ -69,10 +101,43 @@ const cartSlice = createSlice({
     clearCart(state) {
       state.items = [];
     },
+    applySchemes(state, action: PayloadAction<{ schemeType: string; schemeThreshold: number }>) {
+      const { schemeType, schemeThreshold } = action.payload;
+      const cartTotal = state.items.reduce((total, item) => total + (item.price * item.quantity), 0);
+      
+      if (cartTotal >= schemeThreshold) {
+        // Parse scheme type (e.g., "4+1")
+        const schemeMatch = schemeType.match(/(\d+)\+(\d+)/);
+        if (schemeMatch) {
+          const buyQuantity = parseInt(schemeMatch[1]);
+          const freeQuantity = parseInt(schemeMatch[2]);
+          
+          // Calculate scheme benefits per individual product
+          state.items.forEach(item => {
+            const schemeSets = Math.floor(item.quantity / buyQuantity);
+            const additionalProducts = schemeSets * freeQuantity;
+            
+            // Update item with scheme information
+            item.schemeType = schemeType;
+            item.schemeThreshold = schemeThreshold;
+            item.schemeApplied = schemeSets > 0;
+            item.schemeQuantity = additionalProducts;
+            item.schemeSavings = additionalProducts * item.price; // Full price savings for free items
+          });
+        }
+      } else {
+        // Remove scheme information if threshold not met
+        state.items.forEach(item => {
+          item.schemeApplied = false;
+          item.schemeQuantity = 0;
+          item.schemeSavings = 0;
+        });
+      }
+    },
   },
 });
 
-export const { addToCart, removeFromCart, updateQuantity, clearCart } = cartSlice.actions;
+export const { addToCart, removeFromCart, updateQuantity, clearCart, applySchemes } = cartSlice.actions;
 export default cartSlice.reducer;
 
 // Selectors
@@ -104,4 +169,31 @@ export const selectTotalSavings = (state: { cart: CartState }) => {
   }, 0);
   const tieredTotal = selectTieredTotal(state);
   return originalTotal - tieredTotal;
+};
+
+// Scheme-related selectors
+export const selectSchemeInfo = (state: { cart: CartState }) => {
+  const items = state.cart.items;
+  if (items.length === 0) return null;
+  
+  const firstItem = items[0];
+  if (!firstItem.schemeType || !firstItem.schemeApplied) return null;
+  
+  return {
+    schemeType: firstItem.schemeType,
+    schemeThreshold: firstItem.schemeThreshold,
+    schemeQuantity: firstItem.schemeQuantity,
+    schemeSavings: firstItem.schemeSavings,
+  };
+};
+
+export const selectTotalWithSchemes = (state: { cart: CartState }) => {
+  const tieredTotal = selectTieredTotal(state);
+  const schemeInfo = selectSchemeInfo(state);
+  
+  if (schemeInfo && schemeInfo.schemeSavings) {
+    return tieredTotal - schemeInfo.schemeSavings;
+  }
+  
+  return tieredTotal;
 }; 
